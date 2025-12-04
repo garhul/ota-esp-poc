@@ -13,56 +13,78 @@ app.use((req, _res, next) => {
   next();
 });
 
+/*
+typedef device
+@property {string} id
+@property {string} userAgent
+@property {string} board
+@property {string} fwVersion
+@property {string} sketchMD5
+*/
 
 /**
- * /**
-[User-Agent] => ESP8266-http-Update
-[x-ESP8266-STA-MAC] => 18:FE:AA:AA:AA:AA
-[x-ESP8266-AP-MAC] => 1A:FE:AA:AA:AA:AA
-[x-ESP8266-free-space] => 671744
-[x-ESP8266-sketch-size] => 373940
-[x-ESP8266-sketch-md5] => a56f8ef78a0bebd812f62067daf1408a
-[x-ESP8266-chip-size] => 4194304
-[x-ESP8266-sdk-version] => 1.3.0
-[x-ESP8266-version] => DOOR-7-g14f53a19
-[x-ESP8266-mode] => sketch
+ * 
+ * @param {Object} headers 
+ * @returns {device} 
  */
+function getDeviceFromHeaders(headers) {
+  const userAgent = headers['user-agent'];
 
-app.get('/hasUpdates/:deviceModel', async (req, res) => {
-  const deviceModel = req.params.deviceModel;
-  if (!(req.headers['user-agent'] === 'ESP8266-http-Update')) {
-    res.status(400).json({ error: 'Invalid User-Agent, only ESP8266-http-Update is allowed' });
+  switch (userAgent) {
+    case 'ESP8266-http-Update':
+      return {
+        id: headers['x-esp8266-chip-id'],
+        userAgent: headers['user-agent'],
+        board: 'nodemcuv2',
+        fwVersion: headers['x-esp8266-version'],
+        sketchMD5: headers['x-esp8266-sketch-md5']
+      }
+      break;
+    case 'ESP32-http-Update':
+      return {
+        id: headers['x-esp32-chip-id'],
+        userAgent: headers['user-agent'],
+        board: 'esp32-c3-devkitm-1',
+        fwVersion: headers['x-esp32-version'],
+        sketchMD5: headers['x-esp32-sketch-md5']
+      }
+      break;
+    default:
+      throw new Error(`Unsupported User-Agent: ${userAgent}`);
+  }
+}
+
+
+app.get('/hasUpdates', async (req, res) => {
+  try {
+    log.i(`${JSON.stringify(req.headers)}`);
+    const device = getDeviceFromHeaders(req.headers);
+
+    if (!(await versionManager.canUpdate(device))) {
+      log.i(`No update available for device: ${device.board}-${device.id}`);
+      res.status(304);
+      res.send();
+      return;
+    }
+
+    const newFirmware = await versionManager.getLatestFirmware(device);
+
+    res.status(200);
+    res.header('Content-Type', 'application/octet-stream');
+    res.header('Content-Length', newFirmware.size);
+    res.header('x-MD5', newFirmware.hash);
+    res.header('x-version', newFirmware.version);
+    res.send(newFirmware.binary);
+
+  } catch (error) {
+    log.e(`Error parsing device info: ${error.message}`);
+    res.status(400).json({ error: error.message });
     return;
   }
-
-  const fwVersion = req.headers['x-esp8266-version'];
-  const chipId = req.headers['x-esp8266-chip-id'];
-  const sketchMD5 = req.headers['x-esp8266-sketch-md5'];
-
-  log.i(`Update check, device: ${deviceModel}-${chipId}, fw: ${fwVersion}`);
-  log.i(`Request headers: ${JSON.stringify(req.headers)}`);
-
-  if (!(await versionManager.canUpdate(deviceModel, fwVersion, sketchMD5))) {
-    log.i(`No update available for device: ${deviceModel}-${chipId}`);
-    res.status(304);
-    res.send();
-    return;
-  }
-
-  const newFirmware = await versionManager.getLatestFirmware(deviceModel);
-
-  res.status(200);
-  res.header('Content-Type', 'application/octet-stream');
-  // res.header('Content-Disposition', `attachment; filename=${path.basename(fwPath)}`);
-  res.header('Content-Length', newFirmware.size);
-  res.header('x-MD5', newFirmware.hash);
-  res.header('x-version', newFirmware.version);
-  res.send(newFirmware.binary);
-
 });
 
 
 app.listen(port, () => {
-  log.i(`Example app listening on port ${port}`);
+  log.i(`ESP OTA Repo server listening on port ${port}`);
 })
 

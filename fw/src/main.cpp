@@ -1,68 +1,46 @@
-#include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266httpUpdate.h>
+#include "main.h"
 
-#define XSTR(x) #x
-#define STR(x) XSTR(x)
-
-void startWiFi() {
-  // Connect to WiFi
-  WiFi.begin(STR(WIFI_SSID), STR(WIFI_PASSWORD));
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
-  Serial.println("Connected to WiFi");
-  // WiFi.printDiag(Serial);
-  Serial.println("Gateway IP: " + WiFi.gatewayIP().toString());
-  Serial.println("IP Address: " + WiFi.localIP().toString());
-}
+void debugConfig() {
+#ifdef ESP8266
+  dbg("------------------------- CONFIG FOR ESP8266 -------------------------\n");
+  dbg("WIFI_SSID: %s \n", String(STR(WIFI_SSID)).c_str());
+  dbg("WIFI_PASSWORD: %s \n", String(STR(WIFI_PASSWORD)).c_str());
+  dbg("REPOSITORY_URL: %s \n", String(STR(REPOSITORY_URL)).c_str());
+  dbg("Chip ID: %s \n", String(system_get_chip_id()).c_str());
+  dbg("Firmware Build Version: %s \n", String(STR(FIRMWARE_VERSION)).c_str());
 
 
-void getLatestFirmware() {
-  WiFiClient client;
-  t_httpUpdate_return ret = ESPhttpUpdate.update(client, STR(REPOSITORY_URL), 3000, "/hasUpdates/esp8266", STR(FIRMWARE_VERSION));
-  switch (ret) {
-    case HTTP_UPDATE_FAILED:
-      Serial.println("[update] Update failed.");
-      break;
-    case HTTP_UPDATE_NO_UPDATES:
-      Serial.println("[update] Update no Update.");
-      break;
-    case HTTP_UPDATE_OK:
-      Serial.println("[update] Update ok."); // may not be called since we reboot the ESP
-      break;
-  }
+#elif defined(ESP32)
+  dbg("------------------------- CONFIG FOR ESP32 -------------------------");
+  dbg("WIFI_SSID: %s \n", String(STR(WIFI_SSID)).c_str());
+  dbg("WIFI_PASSWORD: %s \n", String(STR(WIFI_PASSWORD)).c_str());
+  dbg("REPOSITORY_URL: %s \n", String(STR(REPOSITORY_URL)).c_str());
+  dbg("Chip ID: %s \n", String(ESP.getEfuseMac()).c_str());
+  dbg("Firmware Build Version: %s \n", String(STR(FIRMWARE_VERSION)).c_str());
+#endif
 }
 
 void setup() {
-  delay(5000); // delay to allow for serial connection
+  delay(3000); // delay to allow for serial connection
+#ifdef ESP8266
   Serial.begin(115200);
-  Serial.println(String("WIFI_SSID: ") + String(STR(WIFI_SSID)));
-  Serial.println(String("WIFI_PASSWORD: ") + String(STR(WIFI_PASSWORD)));
-  Serial.println(String("REPOSITORY_URL: ") + String(STR(REPOSITORY_URL)));
-  Serial.println("Chip ID: " + String(ESP.getChipId()));
-  Serial.println("Firmware Version: " + String(STR(FIRMWARE_VERSION)));
+#endif
 
-  startWiFi();
-  delay(1000);
-
-  getLatestFirmware();
+  debugConfig();
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
 
+  UpdateManager updateManager = UpdateManager(STR(REPOSITORY_URL), STR(FIRMWARE_VERSION));
+  updateManager.useWifi(STR(WIFI_SSID), STR(WIFI_PASSWORD));
+  updateManager.checkForUpdates();
 }
 
-
 void loop() {
-
-
   // Your main code here
 
   digitalWrite(LED_BUILTIN, HIGH);
   delay(2000);
   digitalWrite(LED_BUILTIN, LOW);
-  delay(2000);
-
+  delay(200);
 }

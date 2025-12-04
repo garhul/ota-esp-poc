@@ -1,27 +1,25 @@
-from curses import version
 from os.path import isfile
+from os import makedirs
 import shutil
 Import("env")
 
 def copy_firmware_files():
-  print("Copying firmware files...")
+  print(f"- Copying firmware files for board {env['BOARD']}")
 
-  VERSION_FILE="version.txt"
-  DESTINATION="../server/firmware/esp8266/{}"
-  ORIGIN=".pio/build/nodemcuv2/firmware.bin"
+  VERSION_FILE=f"{env['BOARD']}_version.txt"
+  DESTINATION=f'../server/firmware/{env["BOARD"]}/'
+  ORIGIN=f".pio/build/{env['BOARD']}/firmware.bin"
   current_version = "0.0.1"
-
 
   with open(VERSION_FILE) as f:
     current_version = f.readline()
-    shutil.copyfile(ORIGIN, DESTINATION.format(f'{current_version}.bin'))
-    shutil.copyfile(VERSION_FILE, DESTINATION.format("latest.txt"))
-
-
+    makedirs(DESTINATION, exist_ok=True)
+    shutil.copyfile(ORIGIN, DESTINATION + f'{current_version}.bin')
+    shutil.copyfile(VERSION_FILE, DESTINATION + "latest.txt")
 
 def bump_and_get_version():
-  VERSION_FILE = 'version.txt'
- 
+  VERSION_FILE = f"{env['BOARD']}_version.txt"
+
   version = "0.0.1"
   try:
     with open(VERSION_FILE) as f:
@@ -37,11 +35,8 @@ def bump_and_get_version():
     print('version number: {}'.format(version))
 
   return version
- 
-
 
 def load_env_variables():
-
   assert isfile(".env")
   try:
     f = open(".env", "r")
@@ -57,12 +52,10 @@ def load_env_variables():
   finally:
     f.close()
 
-
-
-def post(source, target, env):
+def postBuild(source, target, env):
   print("Post-build actions...")
   copy_firmware_files()
 
-env.AddPostAction("buildprog", post)
-
 load_env_variables()
+env.AddPostAction("buildprog", postBuild)
+
